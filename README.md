@@ -1,41 +1,92 @@
-# Formal Proof: √2 is Irrational (Dafny)
+# dafny-math
 
-A machine-verified proof that √2 is irrational, written in [Dafny](https://dafny.org/).
+Machine-verified mathematical proofs in [Dafny](https://dafny.org/).
 
-## What is proved
+All proofs are fully verified by Dafny's SMT backend (Z3), with the exception of one
+documented axiom (`DvdFromWitness` in `lib/Divisibility.dfy` — see below).
 
-```
-∀ p q : ℕ, q > 0 → p² ≠ 2·q²
-```
+---
 
-This is equivalent to saying √2 is irrational: if √2 = p/q, then p² = 2·q², which the proof shows is impossible.
+## Proof index
 
-## Proof strategy: infinite descent
+### Number Theory (`number-theory/`)
 
-Assume p² = 2·q² for some natural numbers p, q with q > 0. Then:
+| Theorem | File | Lemmas | Notes |
+|---|---|---|---|
+| √2 is irrational | `sqrt2-irrational/sqrt2irrational_v1.dfy` | 12 | Standalone, parity-based |
+| √2 is irrational | `sqrt2-irrational/sqrt2irrational_v2.dfy` | 9 | Uses `lib/Divisibility.dfy` |
+| √p is irrational (p prime) | `sqrt-prime-irrational/sqrt_prime_irrational.dfy` | 24 | Euclid's Lemma via Bézout |
 
-1. p² is even → p is even → p = 2h
-2. Substituting: 4h² = 2q² → q² = 2h²
-3. q² is even → q is even → q = 2g
-4. Substituting: 4g² = 2h² → h² = 2g²
-5. (h, g) is a strictly smaller solution with 0 < g < q
+---
 
-This is a contradiction: q cannot decrease indefinitely. Dafny verifies termination via `decreases q`.
+## Proof strategies
 
-## Structure
+### √2 is irrational
 
-| Lemma | Purpose |
-|---|---|
-| `OddSquareIsOdd` | If n = 2k+1, then n² ≡ 1 (mod 2) |
-| `SquareEvenImpliesEven` | n² even → n even (contrapositive of above) |
-| `EvenSquareWitness` | Gives Dafny an explicit witness that p² = 2·q·q is even |
-| `EvenDivision` | n even → n = 2·(n/2) |
-| `Sqrt2Irrational` | Main lemma: infinite descent on q |
-| `Sqrt2IsIrrational` | Top-level theorem (universal quantifier) |
+**Theorem:** ∀ a b : ℕ, b > 0 → a² ≠ 2·b²
 
-## Running the proof
+**Proof (v1, parity-based):** By infinite descent. If a² = 2b², then a² is even → a
+is even → a = 2h. Substituting: 4h² = 2b² → b² = 2h². Then b is even → b = 2g, giving
+h² = 2g² — a strictly smaller solution. Contradiction.
+
+The key lemma (`n² even → n even`) is proved via the contrapositive: if n is odd, n² is odd.
+
+**Proof (v2):** Same descent, but parity is handled via the shared `Dvd` predicate
+(treating 2 as an ordinary divisor). More uniform with the prime proof.
+
+### √p is irrational for any prime p
+
+**Theorem:** ∀ prime p, ∀ a b : ℕ, b > 0 → a² ≠ p·b²
+
+**Proof:** Same infinite descent structure, but "p | a² → p | a" requires
+**Euclid's Lemma**: prime p | a·b → p | a or p | b.
+
+Euclid's Lemma is proved via **Bézout's identity**: if gcd(p, a) = 1, there exist
+naturals s, t with s·p = t·a + 1 (or vice versa). Multiplying by b and using p | a·b
+gives p | b. The extended Euclidean algorithm computes Bézout coefficients as a
+nat-only datatype, avoiding negative numbers entirely.
+
+---
+
+## Shared library
+
+`lib/Divisibility.dfy` provides:
+
+| Name | Type | Description |
+|---|---|---|
+| `Dvd(d, n)` | predicate | d divides n (d > 0, both nat) |
+| `DvdWitness` | lemma | `Dvd(d,n) → ∃ k, n == d*k` |
+| `DvdFromWitness` | **axiom** | `n == d*k → Dvd(d,n)` |
+| `DvdAdd` | lemma | `Dvd(d,x) ∧ Dvd(d,y) → Dvd(d,x+y)` |
+| `DvdMul` | lemma | `Dvd(d,x) → Dvd(d, c*x)` |
+
+`DvdFromWitness` is marked `{:axiom}` because Dafny's Z3 backend cannot prove
+`(d*k) % d == 0` (nonlinear arithmetic). It is mathematically sound.
+See `LESSONS_LEARNED.md` for a full explanation.
+
+---
+
+## Running the proofs
 
 ```bash
-dafny verify sqrt2irrational.dfy
-# Dafny program verifier finished with 12 verified, 0 errors
+dafny verify number-theory/sqrt2-irrational/sqrt2irrational_v1.dfy
+dafny verify number-theory/sqrt2-irrational/sqrt2irrational_v2.dfy
+dafny verify number-theory/sqrt-prime-irrational/sqrt_prime_irrational.dfy
 ```
+
+Expected: `0 errors` for each file.
+
+---
+
+## Further reading
+
+- `LESSONS_LEARNED.md` — what works and what doesn't in Dafny (Z3 limitations, failed approaches, proof patterns)
+- `CLAUDE.md` — project conventions
+
+---
+
+## Planned
+
+- **Number theory:** primality, fundamental theorem of arithmetic, infinitely many primes
+- **Algebra:** group theory basics
+- **Analysis:** real number properties
