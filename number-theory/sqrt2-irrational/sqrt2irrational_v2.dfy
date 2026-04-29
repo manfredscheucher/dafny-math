@@ -10,34 +10,80 @@
 
 include "../../lib/Divisibility.dfy"
 
-// ── Helper: odd squares are odd ───────────────────────────────────────────────
+// ── Dvd(2, n²) → Dvd(2, n) ────────────────────────────────────────────────────
 
-lemma OddSquareIsOdd(k: nat)
-    ensures (2 * k + 1) * (2 * k + 1) % 2 == 1
+// Mod(2*m+1, 2) == 1, by induction on m (subtracting 2 each step).
+lemma OddModTwo(m: nat)
+    ensures Mod(2 * m + 1, 2) == 1
+    decreases m
 {
-    var m := 2 * k * k + 2 * k;
-    assert (2 * k + 1) * (2 * k + 1) == 2 * m + 1;
-}
-
-// If n² is even, then n is even.
-lemma SquareEvenImpliesEven(n: nat)
-    ensures n * n % 2 == 0 ==> n % 2 == 0
-{
-    if n % 2 != 0 {
-        OddSquareIsOdd(n / 2);
-        assert n == 2 * (n / 2) + 1;
+    if m == 0 {
+        // Mod(1, 2) == 1 since 1 < 2. Trivial.
+    } else {
+        OddModTwo(m - 1);
+        // 2*m+1 = 2*(m-1)+1 + 2, so one ModShift step suffices.
+        assert 2 * m + 1 == 2 * (m - 1) + 1 + 2;
+        ModShift(2 * (m - 1) + 1, 2);
     }
 }
 
-// ── Dvd(2, n²) → Dvd(2, n) ────────────────────────────────────────────────────
-
+// Dvd(2, n²) → Dvd(2, n)
 lemma TwoDividesSquareImpliesTwo(n: nat)
     requires n > 0
     requires Dvd(2, n * n)
     ensures Dvd(2, n)
 {
-    SquareEvenImpliesEven(n);
-    assert n % 2 == 0;
+    // Contrapositive: if n is odd, n² is odd.
+    if !Dvd(2, n) {
+        // Mod(n, 2) != 0, so Mod(n, 2) == 1, i.e. n = 2k+1 for k = n/2.
+        var k := n / 2;
+        // n odd and Mod-based: show n == 2*k+1 via DvdWitnessHelper contrapositive
+        assert Mod(n, 2) == 1 by { assert n >= 2 || n == 1; ModOddIsOne(n); }
+        ModOddImpliesOdd(n);
+        var j :| n == 2 * j + 1;
+        // n² = (2j+1)² = 2*(2j²+2j) + 1, so Mod(n², 2) == 1
+        assert n * n == 2 * (2 * j * j + 2 * j) + 1;
+        OddModTwo(2 * j * j + 2 * j);
+        assert Mod(n * n, 2) == 1;
+        assert false; // contradicts Dvd(2, n*n)
+    }
+}
+
+// If Mod(n, 2) != 0 then Mod(n, 2) == 1.
+lemma ModOddIsOne(n: nat)
+    requires Mod(n, 2) != 0
+    ensures Mod(n, 2) == 1
+{
+    // Mod(n, 2) is either 0 or 1 (it's < 2 by definition of Mod).
+    assert Mod(n, 2) < 2 by { ModBound(n, 2); }
+}
+
+lemma ModBound(a: nat, b: nat)
+    requires b > 0
+    ensures Mod(a, b) < b
+    decreases a
+{
+    if a < b { } else { ModBound(a - b, b); }
+}
+
+// If Mod(n, 2) == 1, then n is odd: exists k, n == 2*k+1.
+lemma ModOddImpliesOdd(n: nat)
+    requires Mod(n, 2) == 1
+    ensures exists k: nat :: n == 2 * k + 1
+    decreases n
+{
+    if n == 1 {
+        assert n == 2 * 0 + 1;
+    } else {
+        // n >= 2, so Mod(n, 2) == Mod(n-2, 2) == 1
+        assert n >= 2;
+        ModShift(n - 2, 2);
+        // Mod(n, 2) == Mod(n-2+2, 2) == Mod(n-2, 2) == 1
+        assert Mod(n - 2, 2) == 1;
+        ModOddImpliesOdd(n - 2);
+        var k :| n - 2 == 2 * k + 1;
+        assert n == 2 * (k + 1) + 1;
+    }
 }
 
 // ── Main lemma: infinite descent ─────────────────────────────────────────────
